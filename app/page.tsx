@@ -184,27 +184,27 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-4 md:p-8">
-      <main className="max-w-[1600px] mx-auto space-y-6 md:space-y-8">
+      <main className="max-w-[1600px] mx-auto space-y-8">
         <header className="text-center space-y-2">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 flex items-center justify-center gap-3">
-            <Globe className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600" />
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 flex items-center justify-center gap-3">
+            <Globe className="w-10 h-10 text-blue-600" />
             Global Content Localizer
           </h1>
-          <p className="text-base sm:text-lg text-gray-600">
+          <p className="text-lg text-gray-600">
             Auto-translate your rich text content into multiple languages instantly.
           </p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 lg:h-[calc(100vh-200px)] lg:min-h-[600px]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)] min-h-[600px]">
           {/* Left Column: Input */}
-          <div className="flex flex-col gap-4 bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200">
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+          <div className="flex flex-col gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <div className="flex justify-between items-center">
               <label htmlFor="input" className="text-lg font-semibold text-gray-800">
                 Source Content
               </label>
               <button
                 onClick={loadPreset}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
                 title="Load example content with images and formatting"
               >
                 <Sparkles className="w-4 h-4" /> Load Preset Case
@@ -259,7 +259,7 @@ export default function Home() {
             <button
               onClick={handleTranslateAll}
               disabled={isTranslatingAll || (!inputContent.trim() && !inputContent.includes('<img'))}
-              className="w-full py-3 sm:py-4 rounded-lg bg-blue-600 text-white font-bold text-base sm:text-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-lg bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
             >
               {isTranslatingAll ? (
                 <>
@@ -275,15 +275,15 @@ export default function Home() {
           </div>
 
           {/* Right Column: Multi-language Output */}
-          <div className="flex flex-col gap-4 bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200">
-            <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 sm:flex-row sm:justify-between sm:items-center">
+          <div className="flex flex-col gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-4">
               <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                 {TARGET_LANGUAGES.map((lang) => (
                   <button
                     key={lang.code}
                     onClick={() => setActiveTab(lang.code)}
                     className={`
-                      flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-all whitespace-nowrap
+                      flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
                       ${
                         activeTab === lang.code
                           ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500 ring-offset-2'
@@ -307,7 +307,7 @@ export default function Home() {
               <button
                 onClick={copyToClipboard}
                 disabled={!translations[activeTab]?.content}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 transition-colors sm:ml-4 shrink-0"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 transition-colors ml-4 shrink-0"
               >
                 {copied ? (
                   <>
