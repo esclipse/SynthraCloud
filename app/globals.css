@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* React Quill Overrides */
+.rich-text-editor .ql-container {
+  font-family: inherit;
+  font-size: 1rem;
+  min-height: 300px;
+  height: 100%;
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+}
+
+.rich-text-editor.read-only .ql-container {
+  border: none;
+  background: transparent;
+  min-height: calc(100% - 42px);
+}
+
+.rich-text-editor.read-only .ql-toolbar {
+  display: none;
+}
+
+.rich-text-editor .ql-toolbar {
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+  background: #f9fafb;
+}
+
+.rich-text-editor .ql-editor {
+  min-height: 100%;
+}
