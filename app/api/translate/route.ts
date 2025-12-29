@@ -47,8 +47,7 @@ export async function POST(request: Request) {
           target_lang: targetLanguage,
         },
       },
-      stream: false,
-    });
+    } as any);
 
     let translatedContent = completion.choices[0]?.message?.content || '';
 
