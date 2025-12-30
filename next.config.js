@@ -2,12 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
-    const pythonService =
-      process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
     return [
       {
-        source: '/api/stock-strategy',
-        destination: `${pythonService}/analyze`,
+        source: '/api/stock-analysis',
+        destination: `${process.env.PYTHON_SERVICE_URL}/api/stock-analysis`,
       },
     ];
   },
