@@ -18,9 +18,9 @@ export async function POST(request: Request) {
     const { strategy, symbols, notes, settings, scoring, mode, aiPrompt } =
       await request.json();
 
-    if (!strategy || !symbols) {
+    if (!strategy) {
       return NextResponse.json(
-        { error: 'Missing strategy or symbols' },
+        { error: 'Missing strategy' },
         { status: 400 }
       );
     }
