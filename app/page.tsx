@@ -48,6 +48,14 @@ export default function Home() {
   const [isTranslatingAll, setIsTranslatingAll] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const [stockStrategy, setStockStrategy] = useState('底部暴力K线 (M60)');
+  const [stockSymbols, setStockSymbols] = useState('');
+  const [stockNotes, setStockNotes] = useState('');
+  const [stockResult, setStockResult] = useState('');
+  const [stockLoading, setStockLoading] = useState(false);
+  const [stockError, setStockError] = useState<string | null>(null);
+  const [activeTool, setActiveTool] = useState<'stock' | 'translate'>('stock');
+
   // Format Detection State
   const [detectedFormat, setDetectedFormat] = useState<DetectedFormat>(null);
   const [showFormatPrompt, setShowFormatPrompt] = useState(false);
@@ -182,172 +190,470 @@ export default function Home() {
     setInputContent(PRESET_CONTENT);
   };
 
+  const handleStockAnalysis = async () => {
+    if (!stockSymbols.trim()) return;
+    setStockLoading(true);
+    setStockError(null);
+    setStockResult('');
+
+    try {
+      const response = await fetch('/api/stock-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          strategy: stockStrategy,
+          symbols: stockSymbols,
+          notes: stockNotes,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setStockError(data.error || '分析失败');
+        setStockLoading(false);
+        return;
+      }
+
+      setStockResult(data.analysis || '');
+    } catch (error) {
+      console.error('Stock analysis error:', error);
+      setStockError('网络错误，请稍后重试');
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 p-4 md:p-8">
-      <main className="max-w-[1600px] mx-auto space-y-8">
-        <header className="text-center space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 flex items-center justify-center gap-3">
-            <Globe className="w-10 h-10 text-blue-600" />
-            Global Content Localizer
-          </h1>
-          <p className="text-lg text-gray-600">
-            Auto-translate your rich text content into multiple languages instantly.
-          </p>
+    <div className="min-h-screen bg-slate-950 text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.25),_transparent_45%),radial-gradient(circle_at_25%_25%,_rgba(16,185,129,0.18),_transparent_40%)]" />
+      <div className="relative">
+        <header className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center">
+              <Globe className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold">AgentHub</p>
+              <p className="text-xs text-blue-200/70">整合平台 · AI 工具集</p>
+            </div>
+          </div>
+          <nav className="hidden md:flex items-center gap-6 text-sm text-white/70">
+            <span className="hover:text-white transition-colors">Agent 集合</span>
+            <span className="hover:text-white transition-colors">AI 工具</span>
+            <span className="hover:text-white transition-colors">解决方案</span>
+            <button className="px-4 py-2 rounded-full bg-white text-slate-900 font-semibold shadow-lg shadow-blue-500/20">
+              立即体验
+            </button>
+          </nav>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)] min-h-[600px]">
-          {/* Left Column: Input */}
-          <div className="flex flex-col gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <div className="flex justify-between items-center">
-              <label htmlFor="input" className="text-lg font-semibold text-gray-800">
-                Source Content
-              </label>
-              <button
-                onClick={loadPreset}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
-                title="Load example content with images and formatting"
-              >
-                <Sparkles className="w-4 h-4" /> Load Preset Case
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-hidden rounded-lg border border-gray-300 relative flex flex-col">
-              {showFormatPrompt && (
-                <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center gap-3">
-                    {detectedFormat === 'html' ? (
-                      <Code2 className="w-5 h-5 text-amber-600" />
-                    ) : (
-                      <FileType className="w-5 h-5 text-amber-600" />
-                    )}
-                    <div>
-                      <p className="text-sm font-medium text-amber-800">
-                        Detected raw {detectedFormat === 'html' ? 'HTML' : 'Markdown'}
-                        content
-                      </p>
-                      <p className="text-xs text-amber-600">
-                        Do you want to convert it to rich text format?
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowFormatPrompt(false)}
-                      className="px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 rounded-md transition-colors"
-                    >
-                      Ignore
-                    </button>
-                    <button
-                      onClick={handleFormatConversion}
-                      className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md shadow-sm transition-colors"
-                    >
-                      Convert & Display
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex-1">
-                <Editor
-                  value={inputContent}
-                  onChange={setInputContent}
-                  placeholder="Type or paste your content here..."
-                />
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 space-y-12">
+          <section className="grid lg:grid-cols-[1.05fr_0.95fr] gap-10 items-center">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/10 text-sm text-blue-100">
+                <Sparkles className="w-4 h-4 text-blue-300" />
+                AI+ 工具矩阵 · Agent 一站式调度
               </div>
-            </div>
-
-            <button
-              onClick={handleTranslateAll}
-              disabled={isTranslatingAll || (!inputContent.trim() && !inputContent.includes('<img'))}
-              className="w-full py-4 rounded-lg bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-            >
-              {isTranslatingAll ? (
-                <>
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  Translating to {TARGET_LANGUAGES.length} Languages...
-                </>
-              ) : (
-                <>
-                  Translate to All Languages <ArrowRight className="w-6 h-6" />
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Right Column: Multi-language Output */}
-          <div className="flex flex-col gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-4">
-              <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-                {TARGET_LANGUAGES.map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => setActiveTab(lang.code)}
-                    className={`
-                      flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
-                      ${
-                        activeTab === lang.code
-                          ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500 ring-offset-2'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }
-                    `}
+              <h1 className="text-4xl sm:text-5xl font-semibold leading-tight">
+                面向团队的 AI 整合平台，<br />
+                一次构建，处处可用。
+              </h1>
+              <p className="text-base sm:text-lg text-slate-200/80">
+                集成高效 Agent、精选 AI 工具与工作流，让内容运营、智能投研、研发协作更轻松。
+                当前已上线 AI 选股与翻译工具，更多 AI+ 能力持续扩展。
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button className="px-6 py-3 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-semibold shadow-lg shadow-blue-500/30">
+                  立即体验 AI 选股
+                </button>
+                <button className="px-6 py-3 rounded-xl border border-white/20 text-white/90 hover:bg-white/10">
+                  查看 Agent 目录
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm text-white/80">
+                {[
+                  { label: '可用 Agent', value: '24+' },
+                  { label: '工具模块', value: '32' },
+                  { label: '企业团队', value: '120+' },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
                   >
-                    <span>{lang.flag}</span>
-                    {lang.label}
-                    {translations[lang.code].isLoading && (
-                      <Loader2 className="w-3 h-3 animate-spin ml-1" />
-                    )}
-                    {translations[lang.code].content &&
-                      !translations[lang.code].isLoading && (
-                        <Check className="w-3 h-3 text-green-500 ml-1" />
-                      )}
-                  </button>
+                    <p className="text-xl font-semibold text-white">{item.value}</p>
+                    <p className="text-xs text-white/60">{item.label}</p>
+                  </div>
                 ))}
               </div>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+                <p className="text-sm text-white/60">工作台速览</p>
+                <h2 className="text-2xl font-semibold mt-2">统一调度中心</h2>
+                <div className="mt-6 space-y-4">
+                  {[
+                    {
+                      title: '内容本地化',
+                      desc: '多语言翻译、润色、格式保留。',
+                    },
+                    {
+                      title: '智能工作流',
+                      desc: '自动分配 Agent 与工具编排。',
+                    },
+                    {
+                      title: '交付看板',
+                      desc: '追踪任务状态与内容版本。',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.title}
+                      className="rounded-2xl bg-slate-900/60 border border-white/10 p-4"
+                    >
+                      <p className="font-medium">{item.title}</p>
+                      <p className="text-xs text-white/60 mt-1">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-r from-blue-500/30 via-indigo-500/20 to-emerald-500/20 p-6">
+                <p className="text-sm text-white/70">AI 选股引擎已上线</p>
+                <p className="text-lg font-semibold mt-1">多策略筛选 + AI 解析报告</p>
+                <div className="mt-4 flex items-center gap-3 text-xs text-white/70">
+                  <span className="px-3 py-1 rounded-full bg-white/10">策略可组合</span>
+                  <span className="px-3 py-1 rounded-full bg-white/10">信号自动解读</span>
+                  <span className="px-3 py-1 rounded-full bg-white/10">风险提示</span>
+                </div>
+              </div>
+            </div>
+          </section>
 
-              <button
-                onClick={copyToClipboard}
-                disabled={!translations[activeTab]?.content}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 transition-colors ml-4 shrink-0"
+          <section className="grid lg:grid-cols-3 gap-6">
+            {[
+              {
+                title: '精选 Agent 集合',
+                desc: '覆盖内容、研发、增长、客服等多场景，让团队随时调度最合适的智能协作伙伴。',
+              },
+              {
+                title: 'AI 工具小站',
+                desc: '沉淀高频工具，如翻译、总结、校对与分析，让日常流程更高效。',
+              },
+              {
+                title: '统一权限与品牌',
+                desc: '统一身份、权限与品牌视觉，让工具体验更一致、更易扩展。',
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="rounded-3xl border border-white/10 bg-white/5 p-6 space-y-3"
               >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4 text-green-600" /> Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" /> Copy
-                  </>
-                )}
+                <p className="text-lg font-semibold">{item.title}</p>
+                <p className="text-sm text-white/70 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </section>
+
+          <section className="rounded-[32px] border border-white/10 bg-white/5 p-6 md:p-8 space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <p className="text-sm text-blue-200/80">工具工作台</p>
+                <h2 className="text-2xl font-semibold">AI+ 核心工具快速启动</h2>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs text-white/70">
+                <span className="px-3 py-1 rounded-full bg-white/10">统一 key + url 接入</span>
+                <span className="px-3 py-1 rounded-full bg-white/10">多策略可扩展</span>
+                <span className="px-3 py-1 rounded-full bg-white/10">结果可复盘</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setActiveTool('stock')}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  activeTool === 'stock'
+                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                    : 'bg-white/10 text-white/70 hover:bg-white/20'
+                }`}
+              >
+                AI 选股引擎
+              </button>
+              <button
+                onClick={() => setActiveTool('translate')}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  activeTool === 'translate'
+                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                    : 'bg-white/10 text-white/70 hover:bg-white/20'
+                }`}
+              >
+                AI 翻译工具
               </button>
             </div>
 
-            <div className="relative flex-1 rounded-lg border border-gray-300 overflow-hidden">
-              {translations[activeTab].isLoading ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-gray-50/50 backdrop-blur-sm z-10">
-                  <Loader2 className="w-10 h-10 animate-spin mb-2 text-blue-500" />
-                  <p>
-                    Translating to{' '}
-                    {TARGET_LANGUAGES.find((l) => l.code === activeTab)?.label}...
-                  </p>
-                </div>
-              ) : null}
+            {activeTool === 'stock' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">
+                <div className="flex flex-col gap-4 rounded-2xl bg-slate-950/60 border border-white/10 p-4 md:p-6">
+                  <div>
+                    <p className="text-lg font-semibold">多策略选股 + AI 解读</p>
+                    <p className="text-sm text-white/60 mt-1">
+                      基于 Akshare 数据源与底部暴力 K 线策略，结合 AI 输出趋势与风险摘要。
+                    </p>
+                  </div>
 
-              {translations[activeTab].error ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 bg-red-50 p-8 text-center z-10">
-                  <p className="font-semibold text-lg">Translation Failed</p>
-                  <p className="text-sm mt-2">{translations[activeTab].error}</p>
-                </div>
-              ) : null}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="text-sm text-white/70">
+                      策略选择
+                      <select
+                        value={stockStrategy}
+                        onChange={(event) => setStockStrategy(event.target.value)}
+                        className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option className="text-slate-900" value="底部暴力K线 (M60)">
+                          底部暴力K线 (M60)
+                        </option>
+                        <option className="text-slate-900" value="趋势突破策略">
+                          趋势突破策略
+                        </option>
+                        <option className="text-slate-900" value="量价共振策略">
+                          量价共振策略
+                        </option>
+                        <option className="text-slate-900" value="AI 动态组合">
+                          AI 动态组合
+                        </option>
+                      </select>
+                    </label>
+                    <label className="text-sm text-white/70">
+                      股票池（逗号/空格分隔）
+                      <textarea
+                        value={stockSymbols}
+                        onChange={(event) => setStockSymbols(event.target.value)}
+                        rows={4}
+                        placeholder="例如：600519 000001 300750"
+                        className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
 
-              <Editor
-                value={translations[activeTab].content}
-                readOnly={true}
-                placeholder={`Translation for ${TARGET_LANGUAGES.find((l) => l.code === activeTab)?.label} will appear here...`}
-              />
-            </div>
-          </div>
-        </div>
-      </main>
+                  <label className="text-sm text-white/70">
+                    补充说明（可选）
+                    <textarea
+                      value={stockNotes}
+                      onChange={(event) => setStockNotes(event.target.value)}
+                      rows={3}
+                      placeholder="可填写行业偏好、风险偏好、持仓周期等"
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={handleStockAnalysis}
+                      disabled={stockLoading || !stockSymbols.trim()}
+                      className="flex-1 rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {stockLoading ? 'AI 正在分析中...' : '生成 AI 分析报告'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setStockSymbols('600519 000001 300750 000858');
+                        setStockNotes('偏好消费与新能源，持仓周期 1-3 个月。');
+                      }}
+                      className="rounded-xl border border-white/10 px-4 py-3 text-sm text-white/80 hover:bg-white/10"
+                    >
+                      填充示例
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-4 rounded-2xl bg-white border border-white/10 p-4 md:p-6 text-slate-900">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-700">AI 输出</p>
+                    <span className="text-xs text-slate-500">接入现有 key + url</span>
+                  </div>
+
+                  {stockError ? (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                      {stockError}
+                    </div>
+                  ) : null}
+
+                  <div className="flex-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 whitespace-pre-wrap">
+                    {stockResult ||
+                      '提交股票池后，AI 将输出策略触发逻辑、风险提示与建议关注的信号。'}
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
+                    提示：此处为策略解读与风险分析，不构成投资建议。
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-4 rounded-2xl bg-slate-950/60 border border-white/10 p-4 md:p-6">
+                  <div className="flex items-center justify-between text-sm text-white/70">
+                    <label htmlFor="input" className="font-medium text-white">
+                      源内容
+                    </label>
+                    <button
+                      onClick={loadPreset}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium text-blue-100 bg-blue-500/20 hover:bg-blue-500/30 transition-colors"
+                      title="加载示例内容"
+                    >
+                      <Sparkles className="w-4 h-4" /> 加载示例
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden rounded-2xl border border-white/10 relative flex flex-col bg-white">
+                    {showFormatPrompt && (
+                      <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-center gap-3">
+                          {detectedFormat === 'html' ? (
+                            <Code2 className="w-5 h-5 text-amber-600" />
+                          ) : (
+                            <FileType className="w-5 h-5 text-amber-600" />
+                          )}
+                          <div>
+                            <p className="text-sm font-medium text-amber-800">
+                              检测到{' '}
+                              {detectedFormat === 'html' ? 'HTML' : 'Markdown'}
+                              原始格式
+                            </p>
+                            <p className="text-xs text-amber-600">
+                              是否转换为可编辑富文本？
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowFormatPrompt(false)}
+                            className="px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 rounded-md transition-colors"
+                          >
+                            忽略
+                          </button>
+                          <button
+                            onClick={handleFormatConversion}
+                            className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md shadow-sm transition-colors"
+                          >
+                            转换并展示
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex-1">
+                      <Editor
+                        value={inputContent}
+                        onChange={setInputContent}
+                        placeholder="请输入或粘贴内容..."
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleTranslateAll}
+                    disabled={
+                      isTranslatingAll ||
+                      (!inputContent.trim() && !inputContent.includes('<img'))
+                    }
+                    className="w-full py-3 rounded-xl bg-blue-500 text-white font-semibold text-base hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                  >
+                    {isTranslatingAll ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        正在翻译 {TARGET_LANGUAGES.length} 种语言...
+                      </>
+                    ) : (
+                      <>
+                        一键翻译全部语言 <ArrowRight className="w-5 h-5" />
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-4 rounded-2xl bg-slate-950/60 border border-white/10 p-4 md:p-6">
+                  <div className="flex flex-col gap-3 border-b border-white/10 pb-4">
+                    <p className="text-sm text-white/70">翻译结果</p>
+                    <div className="flex flex-wrap gap-2">
+                      {TARGET_LANGUAGES.map((lang) => (
+                        <button
+                          key={lang.code}
+                          onClick={() => setActiveTab(lang.code)}
+                          className={`
+                          flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
+                          ${
+                            activeTab === lang.code
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-white/10 text-white/70 hover:bg-white/20'
+                          }
+                        `}
+                        >
+                          <span>{lang.flag}</span>
+                          {lang.label}
+                          {translations[lang.code].isLoading && (
+                            <Loader2 className="w-3 h-3 animate-spin ml-1" />
+                          )}
+                          {translations[lang.code].content &&
+                            !translations[lang.code].isLoading && (
+                              <Check className="w-3 h-3 text-emerald-300 ml-1" />
+                            )}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={copyToClipboard}
+                      disabled={!translations[activeTab]?.content}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 disabled:opacity-50 transition-colors self-start"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-300" /> 已复制
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" /> 复制内容
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="relative flex-1 rounded-2xl border border-white/10 overflow-hidden bg-white">
+                    {translations[activeTab].isLoading ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-white/80 backdrop-blur-sm z-10">
+                        <Loader2 className="w-10 h-10 animate-spin mb-2 text-blue-500" />
+                        <p>
+                          正在翻译至{' '}
+                          {TARGET_LANGUAGES.find((l) => l.code === activeTab)
+                            ?.label}
+                          ...
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {translations[activeTab].error ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 bg-red-50 p-8 text-center z-10">
+                        <p className="font-semibold text-lg">翻译失败</p>
+                        <p className="text-sm mt-2">
+                          {translations[activeTab].error}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <Editor
+                      value={translations[activeTab].content}
+                      readOnly={true}
+                      placeholder={`译文将展示在这里（${
+                        TARGET_LANGUAGES.find((l) => l.code === activeTab)?.label
+                      }）...`}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
