@@ -8,6 +8,7 @@ export default function StockPage() {
   const [matches, setMatches] = useState<
     {
       symbol: string;
+      name: string;
       date: string;
       close: number;
       change_pct: number;
