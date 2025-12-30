@@ -26,19 +26,30 @@ export async function POST(request: Request) {
     }
 
     const shouldScore = mode !== 'strategy';
-    const strategyResponse = await fetch(`${PYTHON_SERVICE_URL}/analyze`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        strategy,
-        symbols,
-        notes,
-        scoring,
-        score: shouldScore,
-      }),
-    });
+    let strategyResponse: Response;
+    try {
+      strategyResponse = await fetch(`${PYTHON_SERVICE_URL}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          strategy,
+          symbols,
+          notes,
+          scoring,
+          score: shouldScore,
+        }),
+      });
+    } catch (fetchError: any) {
+      return NextResponse.json(
+        {
+          error: 'Python service unavailable',
+          details: fetchError?.message || 'fetch failed',
+        },
+        { status: 502 }
+      );
+    }
 
     if (!strategyResponse.ok) {
       return NextResponse.json(
