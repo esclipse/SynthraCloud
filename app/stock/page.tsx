@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 
 export default function StockPage() {
   const [strategy, setStrategy] = useState('底部暴力K线 (M60)');
-  const [symbols, setSymbols] = useState('');
-  const [notes, setNotes] = useState('');
   const [result, setResult] = useState('');
   const [matches, setMatches] = useState<
     {
@@ -16,12 +14,26 @@ export default function StockPage() {
       volume_ratio: number;
       turbulence_pct: number;
       min_price_m: number;
+      score: number;
+      pe_ttm: number | null;
+      market_cap_billion: number | null;
+      net_profit: number | null;
+      score_reasons: string[];
     }[]
   >([]);
   const [stats, setStats] = useState<{ total: number; matched: number }>({
     total: 0,
     matched: 0,
   });
+  const [scoreEnabled, setScoreEnabled] = useState(false);
+  const scoring = {
+    peMax: 150,
+    marketCapMin: 100,
+    requireProfit: true,
+  };
+  const defaultPrompt =
+    '请基于策略命中的股票列表，结合市盈率、市值、盈利情况进行评分，输出0-5分，并给出排序建议。';
+  const [aiPrompt, setAiPrompt] = useState(defaultPrompt);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -54,13 +66,13 @@ export default function StockPage() {
     setSettingsOpen(false);
   };
 
-  const handleAnalysis = async () => {
-    if (!symbols.trim()) return;
+  const handleStrategyRun = async () => {
     setLoading(true);
     setError(null);
     setResult('');
     setMatches([]);
     setStats({ total: 0, matched: 0 });
+    setScoreEnabled(false);
 
     try {
       const response = await fetch('/api/stock-analysis', {
@@ -70,8 +82,14 @@ export default function StockPage() {
         },
         body: JSON.stringify({
           strategy,
-          symbols,
-          notes,
+          symbols: '',
+          notes: '',
+          mode: 'strategy',
+          scoring: {
+            pe_max: scoring.peMax,
+            market_cap_min: scoring.marketCapMin,
+            require_profit: scoring.requireProfit,
+          },
           settings: {
             apiKey: apiKey.trim() || undefined,
             baseURL: baseURL.trim() || undefined,
@@ -89,6 +107,56 @@ export default function StockPage() {
       setResult(data.analysis || '');
       setMatches(data.matches || []);
       setStats(data.stats || { total: 0, matched: 0 });
+      setScoreEnabled(Boolean(data.scoreEnabled));
+    } catch (analysisError) {
+      console.error('Stock analysis error:', analysisError);
+      setError('网络错误，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleScore = async () => {
+    if (matches.length === 0) return;
+    setLoading(true);
+    setError(null);
+    setResult('');
+
+    try {
+      const response = await fetch('/api/stock-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          strategy,
+          symbols: '',
+          notes: '',
+          mode: 'score',
+          scoring: {
+            pe_max: scoring.peMax,
+            market_cap_min: scoring.marketCapMin,
+            require_profit: scoring.requireProfit,
+          },
+          aiPrompt,
+          settings: {
+            apiKey: apiKey.trim() || undefined,
+            baseURL: baseURL.trim() || undefined,
+            model: modelName.trim() || undefined,
+          },
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || '评分失败');
+        return;
+      }
+
+      setResult(data.analysis || '');
+      setMatches(data.matches || []);
+      setStats(data.stats || { total: 0, matched: 0 });
+      setScoreEnabled(Boolean(data.scoreEnabled));
     } catch (analysisError) {
       console.error('Stock analysis error:', analysisError);
       setError('网络错误，请稍后重试');
@@ -132,53 +200,53 @@ export default function StockPage() {
                   <option value="AI 动态组合">AI 动态组合</option>
                 </select>
               </label>
-
-              <label className="text-sm text-black/70">
-                股票池（逗号/空格分隔）
-                <textarea
-                  value={symbols}
-                  onChange={(event) => setSymbols(event.target.value)}
-                  rows={4}
-                  placeholder="例如：600519 000001 300750"
-                  className="mt-2 w-full rounded-xl border border-[#0d0d0d0d] bg-white px-3 py-2 text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-black"
-                />
-              </label>
             </div>
 
-            <label className="mt-4 text-sm text-black/70">
-              补充说明（可选）
+            <div className="mt-4 rounded-2xl border border-[#0d0d0d0d] bg-[#f3f3f3] p-4 text-sm text-black/70">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-black/70">评分 Prompt</p>
+                <button
+                  onClick={() => setAiPrompt(defaultPrompt)}
+                  className="rounded-lg border border-[#0d0d0d0d] px-2 py-1 text-xs text-black/70"
+                >
+                  恢复默认
+                </button>
+              </div>
               <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                rows={3}
-                placeholder="行业偏好、风险偏好、持仓周期等"
-                className="mt-2 w-full rounded-xl border border-[#0d0d0d0d] bg-white px-3 py-2 text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-black"
+                value={aiPrompt}
+                onChange={(event) => setAiPrompt(event.target.value)}
+                rows={4}
+                className="mt-3 w-full rounded-xl border border-[#0d0d0d0d] bg-white px-3 py-2 text-sm text-black placeholder:text-black/40"
               />
-            </label>
+            </div>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <button
-                onClick={handleAnalysis}
-                disabled={loading || !symbols.trim()}
+                onClick={handleStrategyRun}
+                disabled={loading}
                 className="flex-1 rounded-xl bg-black px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? 'AI 分析中...' : '生成分析报告'}
+                {loading ? '执行中...' : '执行策略'}
               </button>
               <button
-                onClick={() => {
-                  setSymbols('600519 000001 300750 000858');
-                  setNotes('偏好消费与新能源，持仓周期 1-3 个月。');
-                }}
+                onClick={handleScore}
+                disabled={loading || matches.length === 0}
+                className="flex-1 rounded-xl border border-[#0d0d0d0d] px-4 py-3 text-sm text-black disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                AI 评分
+              </button>
+              <button
+                onClick={() => setAiPrompt(defaultPrompt)}
                 className="rounded-xl border border-[#0d0d0d0d] px-4 py-3 text-sm text-black"
               >
-                填充示例
+                使用默认 Prompt
               </button>
             </div>
           </div>
 
           <div className="flex flex-col gap-4 rounded-2xl border border-[#0d0d0d0d] bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-black/70">分析结果</p>
+              <p className="text-sm font-medium text-black/70">股票排行榜</p>
               <span className="text-xs text-black/40">
                 命中 {stats.matched} / {stats.total}
               </span>
@@ -190,16 +258,11 @@ export default function StockPage() {
               </div>
             ) : null}
 
-            <div className="flex-1 rounded-xl border border-[#0d0d0d0d] bg-[#f3f3f3] p-4 text-sm text-black/80 whitespace-pre-wrap">
-              {result || '提交股票池后，将输出策略解读、风险提示与观察要点。'}
-            </div>
-
             <div className="rounded-xl border border-[#0d0d0d0d] bg-white p-4 text-sm text-black/70">
-              <p className="text-sm font-medium text-black/70">策略命中列表</p>
               {matches.length === 0 ? (
-                <p className="mt-2 text-xs text-black/50">暂无命中结果</p>
+                <p className="text-xs text-black/50">暂无命中结果</p>
               ) : (
-                <div className="mt-3 grid gap-2 text-xs text-black/70">
+                <div className="grid gap-2 text-xs text-black/70">
                   {matches.map((item) => (
                     <div
                       key={`${item.symbol}-${item.date}`}
@@ -207,24 +270,42 @@ export default function StockPage() {
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-medium text-black">
-                          {item.symbol}
+                          {item.name}
                         </span>
-                        <span>{item.date}</span>
+                        <span className="text-black/60">{item.symbol}</span>
                       </div>
                       <div className="mt-1 grid grid-cols-2 gap-2">
                         <span>收盘价：{item.close}</span>
                         <span>涨幅：{item.change_pct}%</span>
                         <span>倍量：{item.volume_ratio}</span>
                         <span>震荡幅度：{item.turbulence_pct}%</span>
+                        {scoreEnabled ? (
+                          <>
+                            <span>评分：{item.score ?? 0}</span>
+                            <span>
+                              市盈率：{item.pe_ttm !== null ? item.pe_ttm : '--'}
+                            </span>
+                            <span>
+                              市值（亿）：
+                              {item.market_cap_billion !== null
+                                ? item.market_cap_billion.toFixed(2)
+                                : '--'}
+                            </span>
+                            <span>
+                              盈利：{item.net_profit !== null ? '是' : '--'}
+                            </span>
+                          </>
+                        ) : null}
                       </div>
+                      {scoreEnabled && item.score_reasons?.length ? (
+                        <div className="mt-2 text-[11px] text-black/50">
+                          评分依据：{item.score_reasons.join(' / ')}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="rounded-xl border border-[#0d0d0d0d] bg-white px-4 py-3 text-xs text-black/50">
-              提示：此处为策略解读与风险分析，不构成投资建议。
             </div>
           </div>
         </section>

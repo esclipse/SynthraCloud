@@ -15,7 +15,8 @@ const createClient = (apiKey?: string, baseURL?: string) =>
 
 export async function POST(request: Request) {
   try {
-    const { strategy, symbols, notes, settings } = await request.json();
+    const { strategy, symbols, notes, settings, scoring, mode, aiPrompt } =
+      await request.json();
 
     if (!strategy || !symbols) {
       return NextResponse.json(
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const shouldScore = mode !== 'strategy';
     const strategyResponse = await fetch(`${PYTHON_SERVICE_URL}/analyze`, {
       method: 'POST',
       headers: {
@@ -33,6 +35,8 @@ export async function POST(request: Request) {
         strategy,
         symbols,
         notes,
+        scoring,
+        score: shouldScore,
       }),
     });
 
@@ -57,6 +61,14 @@ ${symbols}
 【补充说明】
 ${notes || '无'}
 
+【评分标准】
+- 市盈率上限：${strategyResult?.scoring?.pe_max ?? 150}
+- 市值下限（亿）：${strategyResult?.scoring?.market_cap_min ?? 100}
+- 盈利要求：${strategyResult?.scoring?.require_profit ? '是' : '否'}
+
+【评分指令】
+${aiPrompt || '使用默认评分逻辑进行排序与打分。'}
+
 【策略结果】
 总样本数：${strategyResult?.stats?.total ?? 0}
 命中数量：${strategyResult?.stats?.matched ?? 0}
@@ -64,7 +76,9 @@ ${notes || '无'}
 ${(strategyResult?.matches || [])
   .map(
     (item: any) =>
-      `- ${item.symbol} | 收盘 ${item.close} | 涨幅 ${item.change_pct}%`
+      `- ${item.symbol} | 评分 ${item.score ?? 0} | 收盘 ${item.close} | 涨幅 ${
+        item.change_pct
+      }%`
   )
   .join('\n')}
 
@@ -82,7 +96,10 @@ ${(strategyResult?.matches || [])
 `;
 
     let analysis = '';
-    if (settings?.apiKey || settings?.baseURL || settings?.model) {
+    if (
+      shouldScore &&
+      (settings?.apiKey || settings?.baseURL || settings?.model)
+    ) {
       const completion = await createClient(
         settings?.apiKey,
         settings?.baseURL
@@ -102,6 +119,12 @@ ${(strategyResult?.matches || [])
       analysis,
       matches: strategyResult?.matches || [],
       stats: strategyResult?.stats || { total: 0, matched: 0 },
+      scoring: strategyResult?.scoring || {
+        pe_max: 150,
+        market_cap_min: 100,
+        require_profit: true,
+      },
+      scoreEnabled: strategyResult?.score_enabled ?? shouldScore,
     });
   } catch (error: any) {
     console.error('Stock analysis error:', error);

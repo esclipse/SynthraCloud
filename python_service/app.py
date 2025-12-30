@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import akshare as ak
 import pandas as pd
 import warnings
@@ -17,6 +17,8 @@ class AnalyzeRequest(BaseModel):
     strategy: str
     symbols: str
     notes: Optional[str] = None
+    scoring: Optional[Dict[str, Any]] = None
+    score: Optional[bool] = True
 
 
 N = 4
@@ -40,6 +42,37 @@ TIMEOUT = 5
 def parse_symbols(raw: str) -> List[str]:
     cleaned = raw.replace(",", " ").replace("\n", " ")
     return [item.strip() for item in cleaned.split(" ") if item.strip()]
+
+
+def get_stock_list_fast() -> pd.DataFrame:
+    try:
+        try:
+            stock_df = ak.stock_zh_a_spot_em()
+        except Exception:
+            stock_df = ak.stock_info_a_code_name()
+
+        if stock_df.empty:
+            return pd.DataFrame(
+                {
+                    "代码": ["000001", "000002", "600519", "000858", "300750"],
+                    "名称": ["平安银行", "万科A", "贵州茅台", "五粮液", "宁德时代"],
+                }
+            )
+
+        if "名称" in stock_df.columns:
+            stock_df = stock_df[
+                ~stock_df["名称"].astype(str).str.contains("ST")
+            ]
+
+        if "代码" in stock_df.columns:
+            stock_df = stock_df[
+                stock_df["代码"].str.startswith("60")
+                | stock_df["代码"].str.startswith("000")
+            ]
+
+        return stock_df
+    except Exception:
+        return pd.DataFrame()
 
 
 def get_minimal_stock_data(stock_code: str) -> pd.DataFrame:
@@ -91,7 +124,7 @@ def calculate_indicators_exact(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     return df
 
 
-def evaluate_symbol(code: str) -> Optional[dict]:
+def evaluate_symbol(code: str, name: Optional[str]) -> Optional[dict]:
     df = get_minimal_stock_data(code)
     if df.empty:
         return None
@@ -109,6 +142,7 @@ def evaluate_symbol(code: str) -> Optional[dict]:
 
     return {
         "symbol": code,
+        "name": name or code,
         "date": latest["date"].strftime("%Y-%m-%d"),
         "close": round(latest["close"], 2),
         "change_pct": round((latest["涨幅"] - 1) * 100, 2),
@@ -118,17 +152,140 @@ def evaluate_symbol(code: str) -> Optional[dict]:
     }
 
 
+def extract_metric_value(df: pd.DataFrame, keys: List[str]) -> Optional[float]:
+    for key in keys:
+        if key in df.columns:
+            value = df.iloc[-1][key]
+            if pd.isna(value):
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def find_column_by_keyword(df: pd.DataFrame, keyword: str) -> Optional[str]:
+    for col in df.columns:
+        if keyword in str(col):
+            return col
+    return None
+
+
+def fetch_fundamentals(code: str) -> dict:
+    try:
+        df = ak.stock_a_indicator_lg(symbol=code)
+    except Exception:
+        return {"pe_ttm": None, "market_cap_billion": None, "net_profit": None}
+
+    if df.empty:
+        return {"pe_ttm": None, "market_cap_billion": None, "net_profit": None}
+
+    pe_value = extract_metric_value(
+        df,
+        ["pe_ttm", "pe", "市盈率(TTM)", "市盈率"],
+    )
+
+    market_value = extract_metric_value(
+        df,
+        ["total_mv", "总市值", "总市值(万元)", "总市值(亿)"],
+    )
+
+    market_cap_billion = None
+    if market_value is not None:
+        if market_value > 1e5:
+            market_cap_billion = market_value / 10000
+        else:
+            market_cap_billion = market_value
+
+    net_profit = None
+    profit_column = find_column_by_keyword(df, "净利润")
+    if profit_column:
+        try:
+            net_profit = float(df.iloc[-1][profit_column])
+        except (TypeError, ValueError):
+            net_profit = None
+
+    return {
+        "pe_ttm": pe_value,
+        "market_cap_billion": market_cap_billion,
+        "net_profit": net_profit,
+    }
+
+
+def apply_scoring(
+    item: dict, scoring: Dict[str, Any]
+) -> dict:
+    pe_max = scoring.get("pe_max", 150)
+    market_cap_min = scoring.get("market_cap_min", 100)
+    require_profit = scoring.get("require_profit", True)
+
+    fundamentals = fetch_fundamentals(item["symbol"])
+    score = 0
+    reasons = []
+
+    pe_value = fundamentals.get("pe_ttm")
+    if pe_value is not None and pe_value <= pe_max:
+        score += 1
+        reasons.append("市盈率达标")
+
+    market_cap = fundamentals.get("market_cap_billion")
+    if market_cap is not None and market_cap >= market_cap_min:
+        score += 1
+        reasons.append("市值达标")
+
+    net_profit = fundamentals.get("net_profit")
+    if require_profit:
+        if net_profit is not None and net_profit > 0:
+            score += 1
+            reasons.append("盈利")
+    else:
+        reasons.append("未强制盈利")
+
+    item.update(
+        {
+            "score": score,
+            "score_reasons": reasons,
+            "pe_ttm": pe_value,
+            "market_cap_billion": market_cap,
+            "net_profit": net_profit,
+        }
+    )
+    return item
+
+
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
     symbols = parse_symbols(request.symbols)
+    code_name_map = {}
     if not symbols:
-        return {"matches": [], "stats": {"total": 0, "matched": 0}}
+        stock_df = get_stock_list_fast()
+        if stock_df.empty:
+            return {"matches": [], "stats": {"total": 0, "matched": 0}}
+        code_name_map = dict(zip(stock_df["代码"], stock_df["名称"]))
+        symbols = stock_df["代码"].tolist()
+    else:
+        code_name_map = {code: code for code in symbols}
 
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        for item in executor.map(evaluate_symbol, symbols):
+        for item in executor.map(
+            lambda code: evaluate_symbol(code, code_name_map.get(code)),
+            symbols,
+        ):
             if item:
                 results.append(item)
+
+    scoring = request.scoring or {
+        "pe_max": 150,
+        "market_cap_min": 100,
+        "require_profit": True,
+    }
+
+    scored = results
+    if request.score:
+        scored = [apply_scoring(item, scoring) for item in results]
+        scored.sort(key=lambda x: (x["score"], x["change_pct"]), reverse=True)
 
     stats = {
         "total": len(symbols),
@@ -137,6 +294,8 @@ def analyze(request: AnalyzeRequest):
 
     return {
         "strategy": request.strategy,
-        "matches": results,
+        "matches": scored,
         "stats": stats,
+        "scoring": scoring,
+        "score_enabled": bool(request.score),
     }
