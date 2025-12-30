@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const client = new OpenAI({
-  apiKey: 'sk-rX3L6olaIfp2yYILAy1EWbgYI0bLebutNUJrrVKdeBLSlvJM',
-  baseURL: 'https://geekai.co/api/v1',
-});
+const DEFAULT_API_KEY = 'sk-rX3L6olaIfp2yYILAy1EWbgYI0bLebutNUJrrVKdeBLSlvJM';
+const DEFAULT_BASE_URL = 'https://geekai.co/api/v1';
+const DEFAULT_MODEL = 'qwen-plus';
+const PYTHON_SERVICE_URL =
+  process.env.PYTHON_SERVICE_URL || 'http://localhost:8000';
+
+const createClient = (apiKey?: string, baseURL?: string) =>
+  new OpenAI({
+    apiKey: apiKey || DEFAULT_API_KEY,
+    baseURL: baseURL || DEFAULT_BASE_URL,
+  });
 
 export async function POST(request: Request) {
   try {
-    const { strategy, symbols, notes } = await request.json();
+    const { strategy, symbols, notes, settings } = await request.json();
 
     if (!strategy || !symbols) {
       return NextResponse.json(
@@ -16,6 +23,27 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const strategyResponse = await fetch(`${PYTHON_SERVICE_URL}/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        strategy,
+        symbols,
+        notes,
+      }),
+    });
+
+    if (!strategyResponse.ok) {
+      return NextResponse.json(
+        { error: 'Failed to fetch strategy results' },
+        { status: 500 }
+      );
+    }
+
+    const strategyResult = await strategyResponse.json();
 
     const prompt = `
 你是量化策略与投资风险分析助手。请基于以下信息输出中文分析报告（使用小标题与要点）：
@@ -28,6 +56,17 @@ ${symbols}
 
 【补充说明】
 ${notes || '无'}
+
+【策略结果】
+总样本数：${strategyResult?.stats?.total ?? 0}
+命中数量：${strategyResult?.stats?.matched ?? 0}
+命中列表：
+${(strategyResult?.matches || [])
+  .map(
+    (item: any) =>
+      `- ${item.symbol} | 收盘 ${item.close} | 涨幅 ${item.change_pct}%`
+  )
+  .join('\n')}
 
 【策略算法参考】
 - 使用 Akshare 获取最近 M=60 天日线数据
@@ -42,19 +81,28 @@ ${notes || '无'}
 4. 明确提醒：内容仅供研究，不构成投资建议
 `;
 
-    const completion = await client.chat.completions.create({
-      model: 'qwen-plus',
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    } as any);
+    let analysis = '';
+    if (settings?.apiKey || settings?.baseURL || settings?.model) {
+      const completion = await createClient(
+        settings?.apiKey,
+        settings?.baseURL
+      ).chat.completions.create({
+        model: settings?.model || DEFAULT_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      } as any);
+      analysis = completion.choices[0]?.message?.content || '';
+    }
 
-    const analysis = completion.choices[0]?.message?.content || '';
-
-    return NextResponse.json({ analysis });
+    return NextResponse.json({
+      analysis,
+      matches: strategyResult?.matches || [],
+      stats: strategyResult?.stats || { total: 0, matched: 0 },
+    });
   } catch (error: any) {
     console.error('Stock analysis error:', error);
     const errorMessage =
