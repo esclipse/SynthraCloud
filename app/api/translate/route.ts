@@ -1,13 +1,21 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const client = new OpenAI({
-  apiKey: 'sk-rX3L6olaIfp2yYILAy1EWbgYI0bLebutNUJrrVKdeBLSlvJM',
-  baseURL: 'https://geekai.co/api/v1',
-});
-
 export async function POST(request: Request) {
   try {
+    const apiKey = process.env.GEEKAI_API_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Missing translation API key' },
+        { status: 500 }
+      );
+    }
+
+    const client = new OpenAI({
+      apiKey,
+      baseURL: 'https://geekai.co/api/v1',
+    });
     const { content, targetLanguage } = await request.json();
 
     if (!content || !targetLanguage) {
