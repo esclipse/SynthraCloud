@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 type StockAnalysisRequest = {
   strategy?: string;
-  symbols?: string;
+  symbols?: string | string[];
   notes?: string;
 };
 
@@ -40,12 +40,15 @@ export async function POST(request: Request) {
   }
 
   const { strategy, symbols, notes } = payload;
+  const strategyValue = typeof strategy === 'string' ? strategy.trim() : '';
+  const symbolsValue = Array.isArray(symbols)
+    ? symbols.join(',').trim()
+    : typeof symbols === 'string'
+      ? symbols.trim()
+      : '';
 
-  if (!strategy || !symbols) {
-    return NextResponse.json(
-      { error: 'Missing strategy or symbols' },
-      { status: 400 }
-    );
+  if (!symbolsValue) {
+    return NextResponse.json({ error: 'Missing symbols' }, { status: 400 });
   }
 
   try {
@@ -54,7 +57,11 @@ export async function POST(request: Request) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ strategy, symbols, notes }),
+      body: JSON.stringify({
+        strategy: strategyValue,
+        symbols: symbolsValue,
+        notes,
+      }),
     });
 
     const data = await parseJsonResponse(response);
