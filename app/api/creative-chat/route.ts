@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const DEFAULT_API_KEY = 'sk-rX3L6olaIfp2yYILAy1EWbgYI0bLebutNUJrrVKdeBLSlvJM';
-const DEFAULT_BASE_URL = 'https://geekai.co/api/v1';
-const DEFAULT_MODEL = 'qwen-turbo';
+const DEFAULT_API_KEY =
+  process.env.OPENAI_API_KEY || 'sk-2893a75c1cfd407aa601eab503ad918a';
+const DEFAULT_BASE_URL =
+  process.env.OPENAI_BASE_URL ||
+  'https://dashscope.aliyuncs.com/compatible-mode/v1';
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'qwen3-plus';
 const SYSTEM_PROMPT =
   '你是内容创作助手，请根据用户需求输出适合富文本编辑器的 HTML 片段。' +
   '输出仅包含正文内容，不要包含 markdown 代码块、标题之外的说明或外层 HTML/Body 标签。';
