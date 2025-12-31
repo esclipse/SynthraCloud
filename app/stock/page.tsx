@@ -85,17 +85,12 @@ export default function StockPage() {
           strategy,
           symbols: '',
           notes: '',
-          mode: 'strategy',
           scoring: {
             pe_max: scoring.peMax,
             market_cap_min: scoring.marketCapMin,
             require_profit: scoring.requireProfit,
           },
-          settings: {
-            apiKey: apiKey.trim() || undefined,
-            baseURL: baseURL.trim() || undefined,
-            model: modelName.trim() || undefined,
-          },
+          score: false,
         }),
       });
 
@@ -131,14 +126,14 @@ export default function StockPage() {
         },
         body: JSON.stringify({
           strategy,
-          symbols: '',
+          symbols: matches.map((match) => match.symbol).join(','),
           notes: '',
-          mode: 'score',
           scoring: {
             pe_max: scoring.peMax,
             market_cap_min: scoring.marketCapMin,
             require_profit: scoring.requireProfit,
           },
+          score: true,
           aiPrompt,
           settings: {
             apiKey: apiKey.trim() || undefined,

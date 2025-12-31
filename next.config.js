@@ -6,14 +6,6 @@ const pythonServiceUrl = (
 
 const nextConfig = {
   reactStrictMode: true,
-  async rewrites() {
-    return [
-      {
-        source: '/api/stock-analysis',
-        destination: `${pythonServiceUrl}/api/stock-analysis`,
-      },
-    ];
-  },
 };
 
 module.exports = nextConfig;
