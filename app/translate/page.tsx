@@ -149,16 +149,16 @@ export default function TranslatePage() {
           headers: {
             'Content-Type': 'application/json',
           },
-        body: JSON.stringify({
-          content: inputContent,
-          targetLanguage: lang.code,
-          settings: {
-            apiKey: apiKey.trim() || undefined,
-            baseURL: baseURL.trim() || undefined,
-            model: modelName.trim() || undefined,
-          },
-        }),
-      });
+          body: JSON.stringify({
+            content: inputContent,
+            targetLanguage: lang.code,
+            settings: {
+              apiKey: apiKey.trim() || undefined,
+              baseURL: baseURL.trim() || undefined,
+              model: modelName.trim() || undefined,
+            },
+          }),
+        });
 
         const data = await response.json();
         setTranslations((prev) => ({
@@ -216,6 +216,16 @@ export default function TranslatePage() {
     setIsChatting(true);
     setChatError('');
 
+    const assistantMessageId = `${Date.now()}-assistant`;
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      content: '',
+      role: 'assistant',
+    };
+    setChatMessages((prev) => [...prev, assistantMessage]);
+
+    let accumulatedContent = '';
+
     try {
       const response = await fetch('/api/creative-chat', {
         method: 'POST',
@@ -235,29 +245,66 @@ export default function TranslatePage() {
         }),
       });
 
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || '聊天请求失败');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || '聊天请求失败');
       }
 
-      const assistantContent = String(data.message || '').trim();
-      const assistantMessage: ChatMessage = {
-        id: `${Date.now()}-assistant`,
-        content: assistantContent,
-        role: 'assistant',
-      };
-      setChatMessages((prev) => [...prev, assistantMessage]);
+      if (!response.body) {
+        throw new Error('响应体为空');
+      }
 
-      if (assistantContent) {
-        const hasHtml = /<\/?[a-z][\s\S]*>/i.test(assistantContent);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              continue;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+
+              if (parsed.content) {
+                accumulatedContent += parsed.content;
+                setChatMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: accumulatedContent }
+                      : msg
+                  )
+                );
+              }
+            } catch (parseError) {
+              // 忽略 JSON 解析错误（可能是部分数据）
+            }
+          }
+        }
+      }
+
+      if (accumulatedContent.trim()) {
+        const hasHtml = /<\/?[a-z][\s\S]*>/i.test(accumulatedContent);
         const htmlContent = hasHtml
-          ? assistantContent
-          : `<p>${assistantContent}</p>`;
+          ? accumulatedContent
+          : `<p>${accumulatedContent}</p>`;
         setInputContent((prev) => `${prev}${htmlContent}`);
       }
     } catch (error) {
       console.error('Chat error:', error);
       setChatError('AI 聊天服务暂时不可用，请稍后重试。');
+      setChatMessages((prev) => prev.filter((msg) => msg.id !== assistantMessageId));
     } finally {
       setIsChatting(false);
     }
@@ -397,7 +444,7 @@ export default function TranslatePage() {
                 value={translations[activeTab].content}
                 readOnly={true}
                 placeholder={`译文将展示在这里（${TARGET_LANGUAGES.find(
-                  (l) => l.code === activeTab
+                  (lang) => lang.code === activeTab
                 )?.label}）...`}
               />
             </div>
@@ -430,9 +477,7 @@ export default function TranslatePage() {
                     </p>
                   ))}
             </div>
-            {chatError ? (
-              <p className="text-sm text-red-600">{chatError}</p>
-            ) : null}
+            {chatError ? <p className="text-sm text-red-600">{chatError}</p> : null}
             <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 value={chatInput}
