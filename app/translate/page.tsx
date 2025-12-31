@@ -25,6 +25,7 @@ type DetectedFormat = 'html' | 'markdown' | null;
 type ChatMessage = {
   id: string;
   content: string;
+  role: 'user' | 'assistant';
 };
 
 export default function TranslatePage() {
@@ -48,6 +49,8 @@ export default function TranslatePage() {
 
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatError, setChatError] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [baseURL, setBaseURL] = useState('');
@@ -199,16 +202,65 @@ export default function TranslatePage() {
     setInputContent(PRESET_CONTENT);
   };
 
-  const handleChatSend = () => {
+  const handleChatSend = async () => {
     const trimmed = chatInput.trim();
-    if (!trimmed) return;
-    const message = {
-      id: `${Date.now()}`,
+    if (!trimmed || isChatting) return;
+    const message: ChatMessage = {
+      id: `${Date.now()}-user`,
       content: trimmed,
+      role: 'user',
     };
-    setChatMessages((prev) => [...prev, message]);
-    setInputContent((prev) => `${prev}<p>${trimmed}</p>`);
+    const nextMessages = [...chatMessages, message];
+    setChatMessages(nextMessages);
     setChatInput('');
+    setIsChatting(true);
+    setChatError('');
+
+    try {
+      const response = await fetch('/api/creative-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: nextMessages.map((item) => ({
+            role: item.role,
+            content: item.content,
+          })),
+          settings: {
+            apiKey: apiKey.trim() || undefined,
+            baseURL: baseURL.trim() || undefined,
+            model: modelName.trim() || undefined,
+          },
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '聊天请求失败');
+      }
+
+      const assistantContent = String(data.message || '').trim();
+      const assistantMessage: ChatMessage = {
+        id: `${Date.now()}-assistant`,
+        content: assistantContent,
+        role: 'assistant',
+      };
+      setChatMessages((prev) => [...prev, assistantMessage]);
+
+      if (assistantContent) {
+        const hasHtml = /<\/?[a-z][\s\S]*>/i.test(assistantContent);
+        const htmlContent = hasHtml
+          ? assistantContent
+          : `<p>${assistantContent}</p>`;
+        setInputContent((prev) => `${prev}${htmlContent}`);
+      }
+    } catch (error) {
+      console.error('Chat error:', error);
+      setChatError('AI 聊天服务暂时不可用，请稍后重试。');
+    } finally {
+      setIsChatting(false);
+    }
   };
 
   return (
@@ -355,7 +407,7 @@ export default function TranslatePage() {
         <section className="rounded-2xl border border-[#0d0d0d0d] bg-white p-6 shadow-sm">
           <h2 className="text-base font-semibold">在线创作联动</h2>
           <p className="mt-1 text-sm text-black/70">
-            将创作需求输入聊天框，内容会自动追加到左侧编辑器中。
+            将创作需求输入聊天框，AI 会生成内容并自动追加到左侧编辑器中。
           </p>
 
           <div className="mt-4 flex flex-col gap-3">
@@ -363,24 +415,53 @@ export default function TranslatePage() {
               {chatMessages.length === 0
                 ? '暂无聊天内容'
                 : chatMessages.map((message) => (
-                    <p key={message.id} className="mb-2 last:mb-0">
-                      {message.content}
+                    <p
+                      key={message.id}
+                      className={`mb-2 flex items-start gap-2 last:mb-0 ${
+                        message.role === 'assistant'
+                          ? 'text-black'
+                          : 'text-black/80'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold uppercase">
+                        {message.role === 'assistant' ? 'AI' : '你'}
+                      </span>
+                      <span>{message.content}</span>
                     </p>
                   ))}
             </div>
+            {chatError ? (
+              <p className="text-sm text-red-600">{chatError}</p>
+            ) : null}
             <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
-                placeholder="输入要追加的创作内容..."
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleChatSend();
+                  }
+                }}
+                placeholder="输入创作需求，回车发送..."
                 className="flex-1 rounded-xl border border-[#0d0d0d0d] px-3 py-2 text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-black"
               />
               <button
                 onClick={handleChatSend}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-2 text-sm font-medium text-white"
+                disabled={isChatting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                发送
-                <SendHorizonal className="h-4 w-4" />
+                {isChatting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    生成中...
+                  </>
+                ) : (
+                  <>
+                    发送
+                    <SendHorizonal className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </div>
           </div>
