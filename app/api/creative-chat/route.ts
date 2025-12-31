@@ -33,8 +33,8 @@ export async function POST(request: Request) {
           typeof message.content === 'string'
       )
       .map((message: { role?: string; content?: string }) => ({
-        role: message.role,
-        content: message.content,
+        role: message.role as 'user' | 'assistant',
+        content: message.content as string,
       }));
 
     if (sanitizedMessages.length === 0) {
