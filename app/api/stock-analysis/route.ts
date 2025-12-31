@@ -29,11 +29,10 @@ type StockAnalysisRequest = {
   };
 };
 
+const DEFAULT_PYTHON_SERVICE_URL = 'https://stock-service-vi7q.onrender.com';
+
 const buildPythonUrl = () => {
-  const baseUrl = process.env.PYTHON_SERVICE_URL;
-  if (!baseUrl) {
-    return null;
-  }
+  const baseUrl = process.env.PYTHON_SERVICE_URL || DEFAULT_PYTHON_SERVICE_URL;
 
   return `${baseUrl.replace(/\/$/, '')}/analyze`;
 };
@@ -48,12 +47,6 @@ const parseJsonResponse = async (response: Response) => {
 
 export async function POST(request: Request) {
   const pythonUrl = buildPythonUrl();
-  if (!pythonUrl) {
-    return NextResponse.json(
-      { error: 'PYTHON_SERVICE_URL is not configured' },
-      { status: 500 }
-    );
-  }
 
   let payload: StockAnalysisRequest;
   try {
