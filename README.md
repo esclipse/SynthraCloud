@@ -13,5 +13,5 @@ npm run dev
 Create a `.env.local` file if needed:
 
 ```bash
-PYTHON_SERVICE_URL=https://stock-service-vi7q.onrender.com
+PYTHON_SERVICE_URL=https://stock-service-production-1754.up.railway.app
 ```
