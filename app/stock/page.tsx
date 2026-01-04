@@ -67,7 +67,36 @@ export default function StockPage() {
     setSettingsOpen(false);
   };
 
-  const handleStrategyRun = async () => {
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const pollForResult = async (pollToken: string, retryInMs = 2000) => {
+    let attempts = 0;
+    let delayMs = retryInMs;
+
+    while (attempts < 60) {
+      await delay(delayMs);
+
+      const response = await fetch(`/api/stock-analysis?pollToken=${encodeURIComponent(pollToken)}`, {
+        cache: 'no-store',
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '轮询失败');
+      }
+
+      if (!data.polling) {
+        return data;
+      }
+
+      delayMs = data.retryInMs || delayMs;
+      attempts += 1;
+    }
+
+    throw new Error('轮询超时，请稍后重试');
+  };
+
+  const runAnalysis = async (body: any) => {
     setLoading(true);
     setError(null);
     setResult('');
@@ -81,17 +110,7 @@ export default function StockPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          strategy,
-          symbols: '',
-          notes: '',
-          scoring: {
-            pe_max: scoring.peMax,
-            market_cap_min: scoring.marketCapMin,
-            require_profit: scoring.requireProfit,
-          },
-          score: false,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -100,65 +119,57 @@ export default function StockPage() {
         return;
       }
 
-      setResult(data.analysis || '');
-      setMatches(data.matches || []);
-      setStats(data.stats || { total: 0, matched: 0 });
-      setScoreEnabled(Boolean(data.scoreEnabled));
-    } catch (analysisError) {
+      let finalData = data;
+      if (data.polling && data.pollToken) {
+        finalData = await pollForResult(data.pollToken, data.retryInMs);
+      }
+
+      setResult(finalData.analysis || '');
+      setMatches(finalData.matches || []);
+      setStats(finalData.stats || { total: 0, matched: 0 });
+      setScoreEnabled(Boolean(finalData.scoreEnabled));
+    } catch (analysisError: any) {
       console.error('Stock analysis error:', analysisError);
-      setError('网络错误，请稍后重试');
+      setError(analysisError?.message || '网络错误，请稍后重试');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleStrategyRun = async () => {
+    await runAnalysis({
+      strategy,
+      symbols: '',
+      notes: '',
+      scoring: {
+        pe_max: scoring.peMax,
+        market_cap_min: scoring.marketCapMin,
+        require_profit: scoring.requireProfit,
+      },
+      score: false,
+    });
+  };
+
   const handleScore = async () => {
     if (matches.length === 0) return;
-    setLoading(true);
-    setError(null);
-    setResult('');
 
-    try {
-      const response = await fetch('/api/stock-analysis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          strategy,
-          symbols: matches.map((match) => match.symbol).join(','),
-          notes: '',
-          scoring: {
-            pe_max: scoring.peMax,
-            market_cap_min: scoring.marketCapMin,
-            require_profit: scoring.requireProfit,
-          },
-          score: true,
-          aiPrompt,
-          settings: {
-            apiKey: apiKey.trim() || undefined,
-            baseURL: baseURL.trim() || undefined,
-            model: modelName.trim() || undefined,
-          },
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.error || '评分失败');
-        return;
-      }
-
-      setResult(data.analysis || '');
-      setMatches(data.matches || []);
-      setStats(data.stats || { total: 0, matched: 0 });
-      setScoreEnabled(Boolean(data.scoreEnabled));
-    } catch (analysisError) {
-      console.error('Stock analysis error:', analysisError);
-      setError('网络错误，请稍后重试');
-    } finally {
-      setLoading(false);
-    }
+    await runAnalysis({
+      strategy,
+      symbols: matches.map((match) => match.symbol).join(','),
+      notes: '',
+      scoring: {
+        pe_max: scoring.peMax,
+        market_cap_min: scoring.marketCapMin,
+        require_profit: scoring.requireProfit,
+      },
+      score: true,
+      aiPrompt,
+      settings: {
+        apiKey: apiKey.trim() || undefined,
+        baseURL: baseURL.trim() || undefined,
+        model: modelName.trim() || undefined,
+      },
+    });
   };
 
   return (
