@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 export default function StockPage() {
-  const [strategy, setStrategy] = useState('底部暴力K线 (M60)');
+  const [strategy, setStrategy] = useState('s1');
   const [result, setResult] = useState('');
   const [matches, setMatches] = useState<
     {
@@ -177,10 +177,9 @@ export default function StockPage() {
                   onChange={(event) => setStrategy(event.target.value)}
                   className="mt-2 w-full rounded-xl border border-[#0d0d0d0d] bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
                 >
-                  <option value="底部暴力K线 (M60)">底部暴力K线 (M60)</option>
-                  <option value="趋势突破策略">趋势突破策略</option>
-                  <option value="量价共振策略">量价共振策略</option>
-                  <option value="AI 动态组合">AI 动态组合</option>
+                  <option value="s1">策略1：底部暴力K线</option>
+                  <option value="s2">策略2：B2选股策略</option>
+                  <option value="s3">策略3：ZG单针下20</option>
                 </select>
               </label>
               <label className="text-sm text-black/70">
@@ -219,6 +218,13 @@ export default function StockPage() {
                 className="flex-1 rounded-xl bg-black px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? '执行中...' : '执行策略'}
+              </button>
+              <button
+                onClick={handleAllStrategiesRun}
+                disabled={loading}
+                className="flex-1 rounded-xl border border-[#0d0d0d0d] px-4 py-3 text-sm text-black disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                一键执行全部策略
               </button>
               <button
                 onClick={handleScore}

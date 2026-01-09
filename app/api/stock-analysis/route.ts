@@ -10,6 +10,7 @@ const DEFAULT_MODEL = 'qwen-plus';
 type StockSelectionRequest = {
   strategy?: string;
   symbols?: string | string[];
+  strategy?: string;
   notes?: string;
   scoring?: {
     pe_max?: number;
@@ -186,6 +187,12 @@ export async function POST(request: Request) {
     : typeof symbols === 'string'
       ? symbols.trim()
       : '';
+  const normalizedStrategy = normalizeStrategyInput(strategy);
+  const strategyKey = toResultKey(normalizedStrategy) as
+    | 'strategy1'
+    | 'strategy2'
+    | 'strategy3'
+    | 'all';
 
   try {
     const controller = new AbortController();
