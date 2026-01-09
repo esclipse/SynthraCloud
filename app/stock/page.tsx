@@ -15,17 +15,24 @@ export default function StockPage() {
       volume_ratio: number;
       turbulence_pct: number;
       min_price_m: number;
-      score: number;
+      score?: number;
       pe_ttm: number | null;
       market_cap_billion: number | null;
       net_profit: number | null;
-      score_reasons: string[];
+      score_reasons?: string[];
+      strategy?: string;
+      j_value?: number;
+      j_last?: number;
     }[]
   >([]);
   const [stats, setStats] = useState<{ total: number; matched: number }>({
     total: 0,
     matched: 0,
   });
+  const [summary, setSummary] = useState<{
+    total_analyzed?: number;
+    strategy_counts?: Record<string, number>;
+  } | null>(null);
   const [scoreEnabled, setScoreEnabled] = useState(false);
   const scoring = {
     peMax: 150,
@@ -41,6 +48,7 @@ export default function StockPage() {
   const [apiKey, setApiKey] = useState('');
   const [baseURL, setBaseURL] = useState('');
   const [modelName, setModelName] = useState('');
+  const [symbolsInput, setSymbolsInput] = useState('');
 
   useEffect(() => {
     const stored = localStorage.getItem('toolSettings');
@@ -67,41 +75,13 @@ export default function StockPage() {
     setSettingsOpen(false);
   };
 
-  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const pollForResult = async (pollToken: string, retryInMs = 2000) => {
-    let attempts = 0;
-    let delayMs = retryInMs;
-
-    while (attempts < 60) {
-      await delay(delayMs);
-
-      const response = await fetch(`/api/stock-analysis?pollToken=${encodeURIComponent(pollToken)}`, {
-        cache: 'no-store',
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || '轮询失败');
-      }
-
-      if (!data.polling) {
-        return data;
-      }
-
-      delayMs = data.retryInMs || delayMs;
-      attempts += 1;
-    }
-
-    throw new Error('轮询超时，请稍后重试');
-  };
-
   const runAnalysis = async (body: any) => {
     setLoading(true);
     setError(null);
     setResult('');
     setMatches([]);
     setStats({ total: 0, matched: 0 });
+    setSummary(null);
     setScoreEnabled(false);
 
     try {
@@ -119,15 +99,11 @@ export default function StockPage() {
         return;
       }
 
-      let finalData = data;
-      if (data.polling && data.pollToken) {
-        finalData = await pollForResult(data.pollToken, data.retryInMs);
-      }
-
-      setResult(finalData.analysis || '');
-      setMatches(finalData.matches || []);
-      setStats(finalData.stats || { total: 0, matched: 0 });
-      setScoreEnabled(Boolean(finalData.scoreEnabled));
+      setResult(data.analysis || '');
+      setMatches(data.matches || []);
+      setStats(data.stats || { total: 0, matched: 0 });
+      setSummary(data.summary || null);
+      setScoreEnabled(Boolean(data.scoreEnabled));
     } catch (analysisError: any) {
       console.error('Stock analysis error:', analysisError);
       setError(analysisError?.message || '网络错误，请稍后重试');
@@ -139,7 +115,7 @@ export default function StockPage() {
   const handleStrategyRun = async () => {
     await runAnalysis({
       strategy,
-      symbols: '',
+      symbols: symbolsInput.trim(),
       notes: '',
       scoring: {
         pe_max: scoring.peMax,
@@ -155,7 +131,7 @@ export default function StockPage() {
 
     await runAnalysis({
       strategy,
-      symbols: matches.map((match) => match.symbol).join(','),
+      symbols: symbolsInput.trim() || matches.map((match) => match.symbol).join(','),
       notes: '',
       scoring: {
         pe_max: scoring.peMax,
@@ -206,6 +182,15 @@ export default function StockPage() {
                   <option value="量价共振策略">量价共振策略</option>
                   <option value="AI 动态组合">AI 动态组合</option>
                 </select>
+              </label>
+              <label className="text-sm text-black/70">
+                指定股票代码（可选）
+                <input
+                  value={symbolsInput}
+                  onChange={(event) => setSymbolsInput(event.target.value)}
+                  placeholder="如 600519, 000001"
+                  className="mt-2 w-full rounded-xl border border-[#0d0d0d0d] bg-white px-3 py-2 text-sm text-black placeholder:text-black/40"
+                />
               </label>
             </div>
 
@@ -267,7 +252,9 @@ export default function StockPage() {
 
             <div className="rounded-xl border border-[#0d0d0d0d] bg-white p-4 text-sm text-black/70">
               {matches.length === 0 ? (
-                <p className="text-xs text-black/50">暂无命中结果</p>
+                <p className="text-xs text-black/50">
+                  {loading ? '分析中，请稍候...' : '暂无命中结果'}
+                </p>
               ) : (
                 <div className="grid gap-2 text-xs text-black/70">
                   {matches.map((item) => (
@@ -281,11 +268,18 @@ export default function StockPage() {
                         </span>
                         <span className="text-black/60">{item.symbol}</span>
                       </div>
+                      {item.strategy ? (
+                        <div className="mt-1 text-[11px] text-black/50">
+                          {item.strategy}
+                        </div>
+                      ) : null}
                       <div className="mt-1 grid grid-cols-2 gap-2">
                         <span>收盘价：{item.close}</span>
                         <span>涨幅：{item.change_pct}%</span>
                         <span>倍量：{item.volume_ratio}</span>
-                        <span>震荡幅度：{item.turbulence_pct}%</span>
+                        <span>
+                          震荡幅度：{item.turbulence_pct ?? '--'}%
+                        </span>
                         {scoreEnabled ? (
                           <>
                             <span>评分：{item.score ?? 0}</span>
@@ -303,6 +297,12 @@ export default function StockPage() {
                             </span>
                           </>
                         ) : null}
+                        {item.j_value !== undefined ? (
+                          <span>J值：{item.j_value}</span>
+                        ) : null}
+                        {item.j_last !== undefined ? (
+                          <span>前一日J值：{item.j_last}</span>
+                        ) : null}
                       </div>
                       {scoreEnabled && item.score_reasons?.length ? (
                         <div className="mt-2 text-[11px] text-black/50">
@@ -314,6 +314,26 @@ export default function StockPage() {
                 </div>
               )}
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-[#0d0d0d0d] bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-medium text-black/70">AI 分析摘要</h2>
+            {summary?.total_analyzed ? (
+              <span className="text-xs text-black/40">
+                已分析 {summary.total_analyzed} 只股票
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-4 rounded-xl border border-[#0d0d0d0d] bg-[#f3f3f3] p-4 text-sm text-black/70">
+            {result ? (
+              <p className="whitespace-pre-wrap text-sm text-black/80">{result}</p>
+            ) : (
+              <p className="text-xs text-black/50">
+                {loading ? 'AI 分析生成中...' : '暂无分析内容'}
+              </p>
+            )}
           </div>
         </section>
 
