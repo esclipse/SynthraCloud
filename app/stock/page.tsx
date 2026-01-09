@@ -3,18 +3,20 @@
 import { useEffect, useState } from 'react';
 
 export default function StockPage() {
-  const [strategy, setStrategy] = useState('底部暴力K线 (M60)');
+  const [strategy, setStrategy] = useState('s1');
+  const [lastRunStrategy, setLastRunStrategy] = useState('s1');
   const [result, setResult] = useState('');
   const [matches, setMatches] = useState<
     {
       symbol: string;
       name: string;
       date: string;
-      close: number;
-      change_pct: number;
-      volume_ratio: number;
-      turbulence_pct: number;
-      min_price_m: number;
+      close: number | null;
+      change_pct: number | null;
+      volume_ratio: number | null;
+      turbulence_pct: number | null;
+      min_price_m: number | null;
+      swing_pct?: number | null;
       score?: number;
       pe_ttm: number | null;
       market_cap_billion: number | null;
@@ -113,6 +115,7 @@ export default function StockPage() {
   };
 
   const handleStrategyRun = async () => {
+    setLastRunStrategy(strategy);
     await runAnalysis({
       strategy,
       symbols: symbolsInput.trim(),
@@ -126,11 +129,27 @@ export default function StockPage() {
     });
   };
 
+  const handleAllStrategiesRun = async () => {
+    setLastRunStrategy('all');
+    await runAnalysis({
+      strategy: 'all',
+      symbols: symbolsInput.trim(),
+      notes: '',
+      scoring: {
+        pe_max: scoring.peMax,
+        market_cap_min: scoring.marketCapMin,
+        require_profit: scoring.requireProfit,
+      },
+      score: false,
+    });
+  };
+
   const handleScore = async () => {
     if (matches.length === 0) return;
+    const scoreStrategy = lastRunStrategy || strategy;
 
     await runAnalysis({
-      strategy,
+      strategy: scoreStrategy,
       symbols: symbolsInput.trim() || matches.map((match) => match.symbol).join(','),
       notes: '',
       scoring: {
@@ -177,10 +196,11 @@ export default function StockPage() {
                   onChange={(event) => setStrategy(event.target.value)}
                   className="mt-2 w-full rounded-xl border border-[#0d0d0d0d] bg-white px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-black"
                 >
-                  <option value="底部暴力K线 (M60)">底部暴力K线 (M60)</option>
-                  <option value="趋势突破策略">趋势突破策略</option>
-                  <option value="量价共振策略">量价共振策略</option>
-                  <option value="AI 动态组合">AI 动态组合</option>
+                  <option value="s1">策略1：底部暴力K线</option>
+                  <option value="s2">策略2：B2选股策略</option>
+                  <option value="s3">策略3：ZG单针下20</option>
+                  <option value="s4">策略4：B1选股策略</option>
+                  <option value="s5">策略5：启动K选股</option>
                 </select>
               </label>
               <label className="text-sm text-black/70">
@@ -219,6 +239,13 @@ export default function StockPage() {
                 className="flex-1 rounded-xl bg-black px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? '执行中...' : '执行策略'}
+              </button>
+              <button
+                onClick={handleAllStrategiesRun}
+                disabled={loading}
+                className="flex-1 rounded-xl border border-[#0d0d0d0d] px-4 py-3 text-sm text-black disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                一键执行全部策略
               </button>
               <button
                 onClick={handleScore}
@@ -274,11 +301,25 @@ export default function StockPage() {
                         </div>
                       ) : null}
                       <div className="mt-1 grid grid-cols-2 gap-2">
-                        <span>收盘价：{item.close}</span>
-                        <span>涨幅：{item.change_pct}%</span>
-                        <span>倍量：{item.volume_ratio}</span>
+                        <span>收盘价：{item.close ?? '--'}</span>
                         <span>
-                          震荡幅度：{item.turbulence_pct ?? '--'}%
+                          涨幅：
+                          {item.change_pct !== null && item.change_pct !== undefined
+                            ? `${item.change_pct}%`
+                            : '--'}
+                        </span>
+                        <span>倍量：{item.volume_ratio ?? '--'}</span>
+                        <span>
+                          震荡幅度：
+                          {item.turbulence_pct !== null && item.turbulence_pct !== undefined
+                            ? `${item.turbulence_pct}%`
+                            : '--'}
+                        </span>
+                        <span>
+                          前3日振幅：
+                          {item.swing_pct !== null && item.swing_pct !== undefined
+                            ? `${item.swing_pct}%`
+                            : '--'}
                         </span>
                         {scoreEnabled ? (
                           <>
