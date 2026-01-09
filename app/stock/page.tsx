@@ -10,11 +10,11 @@ export default function StockPage() {
       symbol: string;
       name: string;
       date: string;
-      close: number | null;
-      change_pct: number | null;
-      volume_ratio: number | null;
-      turbulence_pct: number | null;
-      min_price_m: number | null;
+      close: number;
+      change_pct: number;
+      volume_ratio: number;
+      turbulence_pct: number;
+      min_price_m: number;
       score?: number;
       pe_ttm: number | null;
       market_cap_billion: number | null;
@@ -115,20 +115,6 @@ export default function StockPage() {
   const handleStrategyRun = async () => {
     await runAnalysis({
       strategy,
-      symbols: symbolsInput.trim(),
-      notes: '',
-      scoring: {
-        pe_max: scoring.peMax,
-        market_cap_min: scoring.marketCapMin,
-        require_profit: scoring.requireProfit,
-      },
-      score: false,
-    });
-  };
-
-  const handleAllStrategiesRun = async () => {
-    await runAnalysis({
-      strategy: 'all',
       symbols: symbolsInput.trim(),
       notes: '',
       scoring: {
@@ -294,19 +280,11 @@ export default function StockPage() {
                         </div>
                       ) : null}
                       <div className="mt-1 grid grid-cols-2 gap-2">
-                        <span>收盘价：{item.close ?? '--'}</span>
+                        <span>收盘价：{item.close}</span>
+                        <span>涨幅：{item.change_pct}%</span>
+                        <span>倍量：{item.volume_ratio}</span>
                         <span>
-                          涨幅：
-                          {item.change_pct !== null && item.change_pct !== undefined
-                            ? `${item.change_pct}%`
-                            : '--'}
-                        </span>
-                        <span>倍量：{item.volume_ratio ?? '--'}</span>
-                        <span>
-                          震荡幅度：
-                          {item.turbulence_pct !== null && item.turbulence_pct !== undefined
-                            ? `${item.turbulence_pct}%`
-                            : '--'}
+                          震荡幅度：{item.turbulence_pct ?? '--'}%
                         </span>
                         {scoreEnabled ? (
                           <>

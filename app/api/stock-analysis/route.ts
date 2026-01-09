@@ -8,6 +8,7 @@ const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const DEFAULT_MODEL = 'qwen-plus';
 
 type StockSelectionRequest = {
+  strategy?: string;
   symbols?: string | string[];
   strategy?: string;
   notes?: string;
@@ -35,106 +36,15 @@ const createClient = (apiKey?: string, baseURL?: string) =>
 
 const buildPythonUrl = () => STOCK_SERVICE_URL;
 
-const normalizeStrategyInput = (strategy?: string) => {
-  if (!strategy) return 'all';
-  if (strategy === 'all' || strategy === '全部策略') return 'all';
-  if (strategy === 's1' || strategy.includes('底部暴力')) return 's1';
-  if (strategy === 's2' || strategy.includes('B2')) return 's2';
-  if (strategy === 's3' || strategy.includes('ZG')) return 's3';
-  if (strategy === 'strategy1') return 's1';
-  if (strategy === 'strategy2') return 's2';
-  if (strategy === 'strategy3') return 's3';
+const normalizeStrategy = (strategy?: string) => {
+  const trimmed = strategy?.trim();
+  if (!trimmed) return 'all';
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('all') || lower.includes('全部')) return 'all';
+  if (trimmed.includes('底部暴力K线')) return 'strategy1';
+  if (trimmed.includes('趋势突破')) return 'strategy2';
+  if (trimmed.includes('量价共振') || trimmed.includes('AI 动态组合')) return 'strategy3';
   return 'all';
-};
-
-const toResultKey = (strategy: string) => {
-  if (strategy === 's1') return 'strategy1';
-  if (strategy === 's2') return 'strategy2';
-  if (strategy === 's3') return 'strategy3';
-  return 'all';
-};
-
-const pickValue = (stock: Record<string, any>, keys: string[]) => {
-  for (const key of keys) {
-    if (Object.prototype.hasOwnProperty.call(stock, key)) {
-      const value = stock[key];
-      if (value !== undefined) {
-        return value;
-      }
-    }
-  }
-  return undefined;
-};
-
-const toNumber = (value: unknown) => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'number') return Number.isNaN(value) ? null : value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value.replace(/,/g, ''));
-    return Number.isNaN(parsed) ? null : parsed;
-  }
-  return null;
-};
-
-const buildMatch = (stock: Record<string, any>, strategyLabel?: string) => {
-  const dateValue = pickValue(stock, ['date', '日期']);
-  return {
-    symbol: pickValue(stock, ['symbol', 'code', '股票代码']) || '',
-    name: pickValue(stock, ['name', '股票名称', '名称']) || '',
-    date:
-      typeof dateValue === 'string'
-        ? dateValue
-        : new Date().toISOString().split('T')[0],
-    close: toNumber(pickValue(stock, ['close', 'close_price', '收盘价'])),
-    change_pct: toNumber(pickValue(stock, ['change_pct', '涨幅(%)', '涨幅'])),
-    volume_ratio: toNumber(pickValue(stock, ['volume_ratio', '成交量倍数', '成交量比'])),
-    turbulence_pct: toNumber(pickValue(stock, ['turbulence_pct', '震荡幅度(%)'])),
-    min_price_m: toNumber(pickValue(stock, ['min_price_m', '最低价_M'])),
-    pe_ttm: toNumber(pickValue(stock, ['pe_ttm', '市盈率'])),
-    market_cap_billion: toNumber(
-      pickValue(stock, ['market_cap_billion', '流通市值(亿)', '市值(亿)'])
-    ),
-    net_profit: toNumber(pickValue(stock, ['net_profit', '盈利'])),
-    j_value: toNumber(pickValue(stock, ['j_value', 'J值'])),
-    j_last: toNumber(pickValue(stock, ['j_last', 'J前一交易日', '前一交易日J值'])),
-    strategy: strategyLabel,
-  };
-};
-
-const mergeMatch = (base: Record<string, any>, incoming: Record<string, any>) => {
-  const merged = { ...base };
-  ([
-    'close',
-    'change_pct',
-    'volume_ratio',
-    'turbulence_pct',
-    'min_price_m',
-    'pe_ttm',
-    'market_cap_billion',
-    'net_profit',
-    'j_value',
-    'j_last',
-  ] as const).forEach((key) => {
-    if (merged[key] === null || merged[key] === undefined || merged[key] === 0) {
-      const incomingValue = incoming[key];
-      if (incomingValue !== null && incomingValue !== undefined) {
-        merged[key] = incomingValue;
-      }
-    }
-  });
-
-  if (incoming.strategy) {
-    if (merged.strategy) {
-      const existing = merged.strategy.split(',').map((item: string) => item.trim());
-      if (!existing.includes(incoming.strategy)) {
-        merged.strategy = `${merged.strategy}, ${incoming.strategy}`;
-      }
-    } else {
-      merged.strategy = incoming.strategy;
-    }
-  }
-
-  return merged;
 };
 
 const parseCloudFunctionResponse = async (response: Response) => {
@@ -167,17 +77,56 @@ const convertCloudFunctionResult = (
   let matches: any[] = [];
 
   if (strategyKey === 'all') {
-    const strategy1Results = (results.strategy1 || []).map((stock: Record<string, any>) =>
-      buildMatch(stock, '策略1: 底部暴力K线')
-    );
+    const strategy1Results = (results.strategy1 || []).map((stock: { code: string; name: string }) => ({
+      symbol: stock.code,
+      name: stock.name,
+      date: new Date().toISOString().split('T')[0],
+      close: 0,
+      change_pct: 0,
+      volume_ratio: 0,
+      turbulence_pct: null,
+      min_price_m: null,
+      pe_ttm: null,
+      market_cap_billion: null,
+      net_profit: null,
+      j_value: undefined,
+      j_last: undefined,
+      strategy: '策略1: 底部暴力K线',
+    }));
 
-    const strategy2Results = (results.strategy2 || []).map((stock: Record<string, any>) =>
-      buildMatch(stock, '策略2: B2选股策略')
-    );
+    const strategy2Results = (results.strategy2 || []).map((stock: { code: string; name: string }) => ({
+      symbol: stock.code,
+      name: stock.name,
+      date: new Date().toISOString().split('T')[0],
+      close: 0,
+      change_pct: 0,
+      volume_ratio: 0,
+      turbulence_pct: null,
+      min_price_m: null,
+      pe_ttm: null,
+      market_cap_billion: null,
+      net_profit: null,
+      j_value: undefined,
+      j_last: undefined,
+      strategy: '策略2: B2选股策略',
+    }));
 
-    const strategy3Results = (results.strategy3 || []).map((stock: Record<string, any>) =>
-      buildMatch(stock, '策略3: ZG单针下20')
-    );
+    const strategy3Results = (results.strategy3 || []).map((stock: { code: string; name: string }) => ({
+      symbol: stock.code,
+      name: stock.name,
+      date: new Date().toISOString().split('T')[0],
+      close: 0,
+      change_pct: 0,
+      volume_ratio: 0,
+      turbulence_pct: null,
+      min_price_m: null,
+      pe_ttm: null,
+      market_cap_billion: null,
+      net_profit: null,
+      j_value: undefined,
+      j_last: undefined,
+      strategy: '策略3: ZG单针下20',
+    }));
 
     const stockMap = new Map<string, any>();
 
@@ -185,7 +134,9 @@ const convertCloudFunctionResult = (
       const key = stock.symbol;
       if (stockMap.has(key)) {
         const existing = stockMap.get(key);
-        stockMap.set(key, mergeMatch(existing, stock));
+        if (!existing.strategy.includes(stock.strategy.split(':')[0])) {
+          existing.strategy += `, ${stock.strategy.split(':')[0]}`;
+        }
       } else {
         stockMap.set(key, stock);
       }
@@ -194,13 +145,21 @@ const convertCloudFunctionResult = (
     matches = Array.from(stockMap.values());
   } else {
     const strategyResults = results[strategyKey] || [];
-    const labelMap: Record<string, string> = {
-      strategy1: '策略1: 底部暴力K线',
-      strategy2: '策略2: B2选股策略',
-      strategy3: '策略3: ZG单针下20',
-    };
-    const label = labelMap[strategyKey];
-    matches = strategyResults.map((stock: Record<string, any>) => buildMatch(stock, label));
+    matches = strategyResults.map((stock: { code: string; name: string }) => ({
+      symbol: stock.code,
+      name: stock.name,
+      date: new Date().toISOString().split('T')[0],
+      close: 0,
+      change_pct: 0,
+      volume_ratio: 0,
+      turbulence_pct: null,
+      min_price_m: null,
+      pe_ttm: null,
+      market_cap_billion: null,
+      net_profit: null,
+      j_value: undefined,
+      j_last: undefined,
+    }));
   }
 
   return {
@@ -222,7 +181,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { symbols, notes, scoring, score, aiPrompt, settings, strategy } = payload;
+  const { strategy, symbols, notes, scoring, score, aiPrompt, settings } = payload;
   const symbolsValue = Array.isArray(symbols)
     ? symbols.join(',').trim()
     : typeof symbols === 'string'
@@ -241,6 +200,7 @@ export async function POST(request: Request) {
     const timeout = hasSymbols ? 3 * 60 * 1000 : 15 * 60 * 1000;
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+    const strategyKey = normalizeStrategy(strategy);
     let response: Response | null = null;
     let data: any = null;
     const maxRetries = 2;
@@ -258,7 +218,7 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             stock_count: 100,
-            strategy: normalizedStrategy,
+            strategy: strategyKey,
             symbols: symbolsValue || undefined,
             notes: notes || undefined,
             scoring: scoring || undefined,
@@ -340,20 +300,14 @@ export async function POST(request: Request) {
 
         const client = createClient(apiKey, baseURL);
 
-        const formatValue = (value: unknown) => {
-          if (value === null || value === undefined || value === '') return '--';
-          if (typeof value === 'number') return Number.isNaN(value) ? '--' : value;
-          return value;
-        };
-
         const stocksSummary = data.matches
           .slice(0, 20)
           .map((stock: any) => {
             const info: string[] = [
               `${stock.name}(${stock.symbol})`,
-              `收盘价: ${formatValue(stock.close)}`,
-              `涨幅: ${formatValue(stock.change_pct)}%`,
-              `倍量: ${formatValue(stock.volume_ratio)}`,
+              `收盘价: ${stock.close}`,
+              `涨幅: ${stock.change_pct}%`,
+              `倍量: ${stock.volume_ratio}`,
             ];
             if (stock.score !== undefined) {
               info.push(`评分: ${stock.score}/5`);
